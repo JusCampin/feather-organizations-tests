@@ -22,6 +22,12 @@ it, and verifies exact activation replay. It does not alter money/items. Repeat
 the exact request ID after restart; never use a fresh ID to recover its fixed key.
 This tests creator ownership, not player membership or Authority policy decisions.
 
+After directory/identity live acceptance, run
+`OrganizationsIdentityBoundaryTest org-identity-boundary-001`. It denies renaming
+the main resource's identity-test entity, checks exported bounded listing, then
+renames/replays the fixture-owned entity from revision 2 to 3. Retain that exact
+ID on restart. It creates no additional entity and changes no money/items.
+
 Stop the fixture after testing:
 
 ```text

@@ -38,3 +38,38 @@ RegisterCommand('OrganizationsOwnershipBoundaryTest',function(source,args)
     end,debug.traceback)
     if not called then print('[OrganizationsOwnershipBoundaryTest] FAIL ' .. tostring(result)) end
 end,true)
+
+RegisterCommand('OrganizationsIdentityBoundaryTest',function(source,args)
+    if source~=0 then return end
+    local base=args[1]
+    if #args~=1 or type(base)~='string' or #base>100 or not base:match('^[A-Za-z0-9][A-Za-z0-9._:%-]*$') then
+        print('[OrganizationsIdentityBoundaryTest] FAIL use <stable requestId>');return
+    end
+    local called,result=xpcall(function()
+        local api=exports['feather-organizations']
+        local target=api:FindOrganizationByKey({organizationKey='org_identity_test'})
+        if not target.ok then print('[OrganizationsIdentityBoundaryTest] FAIL run identity acceptance first');return end
+        local denied=api:UpdateOrganizationIdentity({organizationId=target.value.organizationId,
+            expectedRevision=target.value.revision,requestId=base .. ':foreign',reasonCode='development.identity_boundary',
+            legalName='Foreign Edit Company',displayName='Foreign Edit'})
+        local after=api:GetOrganization({organizationId=target.value.organizationId})
+        local page=api:ListOrganizations({limit=1,organizationType='business'})
+        local owned=api:FindOrganizationByKey({organizationKey='org_ownership_fixture'})
+        if not owned.ok then print('[OrganizationsIdentityBoundaryTest] FAIL run ownership acceptance first');return end
+        -- Ownership fixture was activated at revision 2. Keep this original edit
+        -- payload on all retries rather than take a new expected revision.
+        local request={organizationId=owned.value.organizationId,expectedRevision=2,requestId=base .. ':edit',
+            reasonCode='development.identity_boundary',legalName='Renamed Ownership Fixture Company',displayName='Renamed Ownership Fixture'}
+        local edit=api:UpdateOrganizationIdentity(request)
+        local replay=api:UpdateOrganizationIdentity(request)
+        local good=not denied.ok and denied.code=='authorization_denied' and after.ok
+            and after.value.revision==target.value.revision and after.value.legalName==target.value.legalName
+            and after.value.displayName==target.value.displayName and page.ok and #page.value.items<=1
+            and edit.ok and edit.value.revision==3 and replay.ok and replay.value.replayed==true
+        print(('[OrganizationsIdentityBoundaryTest] %s foreignDenied=%s targetUnchanged=%s boundedList=%s ownAllowed=%s replayed=%s'):format(
+            good and 'PASS' or 'FAIL',tostring(not denied.ok and denied.code=='authorization_denied'),
+            tostring(after.ok and after.value.revision==target.value.revision),tostring(page.ok and #page.value.items<=1),
+            tostring(edit.ok),tostring(replay.ok and replay.value.replayed)))
+    end,debug.traceback)
+    if not called then print('[OrganizationsIdentityBoundaryTest] FAIL ' .. tostring(result)) end
+end,true)
