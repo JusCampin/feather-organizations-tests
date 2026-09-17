@@ -114,3 +114,28 @@ RegisterCommand('OrganizationsIdentityBoundaryTest',function(source,args)
     end,debug.traceback)
     if not called then print('[OrganizationsIdentityBoundaryTest] FAIL ' .. tostring(result)) end
 end,true)
+RegisterCommand('OrganizationsAuditBoundaryTest',function(source)
+    if source~=0 then return end
+    local called,reason=xpcall(function()
+        local api=exports['feather-organizations']
+        local foreign=api:FindOrganizationByKey({organizationKey='org_event_test_child'})
+        local owned=api:FindOrganizationByKey({organizationKey='org_ownership_fixture'})
+        assert(foreign.ok and owned.ok,'Run event and ownership acceptance first')
+        local denied=api:InspectOrganizationHistory({organizationId=foreign.value.organizationId,limit=1})
+        assert(not denied.ok and denied.code=='authorization_denied','Foreign history was not denied')
+        local injected=api:InspectOrganizationHistory({organizationId=owned.value.organizationId,sourceResource='feather-organizations'})
+        assert(not injected.ok and injected.code=='invalid_input','Caller injection not rejected')
+        local first=api:InspectOrganizationHistory({organizationId=owned.value.organizationId,limit=1})
+        assert(first.ok and #first.value.items==1 and first.value.nextCursor,'Own bounded history unavailable')
+        local second=api:InspectOrganizationHistory({organizationId=owned.value.organizationId,limit=1,cursor=first.value.nextCursor})
+        assert(second.ok and #second.value.items==1,'Second page unavailable')
+        assert(first.value.items[1].eventId~=second.value.items[1].eventId,'Duplicate history event')
+        for _,page in ipairs({first.value,second.value}) do
+            local event=page.items[1]
+            assert(event.organizationId==owned.value.organizationId and event.sourceResource==GetCurrentResourceName(),'Foreign attribution returned')
+            assert(event.legalName==nil and event.displayName==nil,'Names returned in audit projection')
+        end
+        print('[OrganizationsAuditBoundaryTest] PASS foreignDenied=true spoofDenied=true ownAllowed=true bounded=true paginated=true attribution=true (read-only)')
+    end,debug.traceback)
+    if not called then print('[OrganizationsAuditBoundaryTest] FAIL '..tostring(reason)) end
+end,true)

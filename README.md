@@ -38,6 +38,11 @@ belongs in production/default recipe startup.
 
 Stop the fixture after testing:
 
+Before stopping, run `OrganizationsAuditBoundaryTest` after event and ownership
+acceptance. It verifies creator-scoped history access, rejects caller injection,
+and checks bounded pagination and attribution through actual exports (read-only).
+Repeat after restarting the fixture.
+
 ```text
 stop feather-organizations-tests
 ```
