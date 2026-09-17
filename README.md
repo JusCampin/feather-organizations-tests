@@ -38,6 +38,12 @@ belongs in production/default recipe startup.
 
 Stop the fixture after testing:
 
+`OrganizationsInterestReadBoundaryTest` is read-only after interest mutation and
+multi-page read acceptance. It denies foreign interest reads and identity spoofing,
+reads the fixture's own revoked interest, checks filters, cursor authorization,
+projection privacy/isolation and unchanged organization revisions. Repeat after
+restarting the fixture.
+
 `OrganizationsInterestBoundaryTest org-interest-boundary-001 <character UUID>`
 uses actual exports to deny foreign grant/revoke and caller spoofing, then creates
 one fixture-owned fixed-key organization and grants/revokes/replays an owner

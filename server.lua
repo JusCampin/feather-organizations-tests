@@ -184,3 +184,42 @@ RegisterCommand('OrganizationsInterestBoundaryTest',function(source,args)
     end,debug.traceback)
     if not called then print('[OrganizationsInterestBoundaryTest] FAIL '..tostring(reason)) end
 end,true)
+RegisterCommand('OrganizationsInterestReadBoundaryTest',function(source)
+    if source~=0 then return end
+    local called,reason=xpcall(function()
+        local api=exports['feather-organizations']
+        local function Require(result)
+            assert(result.ok,tostring(result.code)..': '..tostring(result.message));return result.value
+        end
+        local foreign=Require(api:FindOrganizationByKey({organizationKey='org_interest_read_test'}))
+        local owned=Require(api:FindOrganizationByKey({organizationKey='org_interest_fixture'}))
+        local denied=api:ListOrganizationInterests({organizationId=foreign.organizationId,limit=1})
+        assert(not denied.ok and denied.code=='authorization_denied' and denied.value==nil,'Foreign interests not denied')
+        local spoof=api:ListOrganizationInterests({organizationId=foreign.organizationId,sourceResource='feather-organizations'})
+        assert(not spoof.ok and spoof.code=='invalid_input','Caller injection not rejected')
+        local page=Require(api:ListOrganizationInterests({organizationId=owned.organizationId,status='revoked',limit=1}))
+        assert(#page.items==1 and not page.nextCursor,'Own revoked interest page invalid')
+        local item=page.items[1]
+        local originalHolder=item.holderId
+        assert(item.organizationId==owned.organizationId and item.holderType=='character' and item.interestType=='owner'
+            and item.status=='revoked' and item.revision==3 and type(originalHolder)=='string','Own interest identity/state invalid')
+        for field in pairs(item) do
+            assert(field=='interestId' or field=='organizationId' or field=='interestType' or field=='holderType'
+                or field=='holderId' or field=='status' or field=='revision','Private profile/account field returned')
+        end
+        local active=Require(api:ListOrganizationInterests({organizationId=owned.organizationId,status='active',limit=1}))
+        assert(#active.items==0 and not active.nextCursor,'Active filter returned revoked interest')
+        local filterMismatch=api:ListOrganizationInterests({organizationId=owned.organizationId,status='active',cursor=item.interestId})
+        assert(not filterMismatch.ok and filterMismatch.code=='invalid_cursor','Filter mismatch not rejected')
+        local cursorDenied=api:ListOrganizationInterests({organizationId=foreign.organizationId,cursor=item.interestId})
+        assert(not cursorDenied.ok and cursorDenied.code=='authorization_denied','Cursor bypassed target authorization')
+        item.holderId='tampered'
+        local reread=Require(api:ListOrganizationInterests({organizationId=owned.organizationId,limit=1}))
+        assert(#reread.items==1 and reread.items[1].holderId==originalHolder,'Caller mutation affected subsequent read')
+        local afterForeign=Require(api:GetOrganization({organizationId=foreign.organizationId}))
+        local afterOwned=Require(api:GetOrganization({organizationId=owned.organizationId}))
+        assert(afterForeign.revision==foreign.revision and afterOwned.revision==owned.revision,'Read changed organization revisions')
+        print('[OrganizationsInterestReadBoundaryTest] PASS foreignDenied=true spoofDenied=true ownRevokedReadable=true filters=true cursorAuthorization=true isolated=true privateFieldsExcluded=true unchanged=true (read-only)')
+    end,debug.traceback)
+    if not called then print('[OrganizationsInterestReadBoundaryTest] FAIL '..tostring(reason)) end
+end,true)
