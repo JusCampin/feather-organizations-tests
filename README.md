@@ -28,6 +28,14 @@ the main resource's identity-test entity, checks exported bounded listing, then
 renames/replays the fixture-owned entity from revision 2 to 3. Retain that exact
 ID on restart. It creates no additional entity and changes no money/items.
 
+After hierarchy live acceptance, `OrganizationsHierarchyBoundaryTest
+org-hierarchy-boundary-001` verifies foreign-child and foreign-parent rejection,
+then links the fixture-owned entity (revision 3 from identity acceptance) to a
+separate new fixture-owned parent. It checks set replay and bounded children
+reads through real exports. Repeat its original ID after restart. Parent links
+do not grant privileged cross-owner access. Neither this fixture nor its trust
+belongs in production/default recipe startup.
+
 Stop the fixture after testing:
 
 ```text

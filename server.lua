@@ -39,6 +39,47 @@ RegisterCommand('OrganizationsOwnershipBoundaryTest',function(source,args)
     if not called then print('[OrganizationsOwnershipBoundaryTest] FAIL ' .. tostring(result)) end
 end,true)
 
+RegisterCommand('OrganizationsHierarchyBoundaryTest',function(source,args)
+    if source~=0 then return end
+    local base=args[1]
+    if #args~=1 or type(base)~='string' or #base>100 or not base:match('^[A-Za-z0-9][A-Za-z0-9._:%-]*$') then
+        print('[OrganizationsHierarchyBoundaryTest] FAIL use <stable requestId>');return
+    end
+    local called,result=xpcall(function()
+        local api=exports['feather-organizations']
+        local foreign=api:FindOrganizationByKey({organizationKey='org_hierarchy_test_1'})
+        local owned=api:FindOrganizationByKey({organizationKey='org_ownership_fixture'})
+        if not foreign.ok or not owned.ok then print('[OrganizationsHierarchyBoundaryTest] FAIL run earlier hierarchy/fixture acceptance first');return end
+        local created=api:CreateOrganization({requestId=base .. ':create',organizationType='business',
+            organizationKey='org_hierarchy_fixture_parent',legalName='Hierarchy Fixture Parent Company',
+            displayName='Hierarchy Fixture Parent',reasonCode='development.hierarchy_boundary'})
+        if not created.ok then print('[OrganizationsHierarchyBoundaryTest] FAIL create code=' .. created.code);return end
+        local deniedChild=api:SetParentOrganization({organizationId=foreign.value.organizationId,
+            parentOrganizationId=created.value.organizationId,expectedRevision=foreign.value.revision,
+            requestId=base .. ':foreign_child',reasonCode='development.hierarchy_boundary'})
+        local deniedParent=api:SetParentOrganization({organizationId=owned.value.organizationId,
+            parentOrganizationId=foreign.value.organizationId,expectedRevision=3,
+            requestId=base .. ':foreign_parent',reasonCode='development.hierarchy_boundary'})
+        local request={organizationId=owned.value.organizationId,parentOrganizationId=created.value.organizationId,
+            expectedRevision=3,requestId=base .. ':set',reasonCode='development.hierarchy_boundary'}
+        local set=api:SetParentOrganization(request)
+        local replay=api:SetParentOrganization(request)
+        local children=api:ListOrganizationChildren({organizationId=created.value.organizationId,limit=1})
+        local after=api:GetOrganization({organizationId=foreign.value.organizationId})
+        local good=not deniedChild.ok and deniedChild.code=='authorization_denied'
+            and not deniedParent.ok and deniedParent.code=='authorization_denied' and set.ok and set.value.revision==4
+            and replay.ok and replay.value.replayed==true and children.ok and #children.value.items==1
+            and children.value.items[1].organizationId==owned.value.organizationId and after.ok
+            and after.value.revision==foreign.value.revision and after.value.parentOrganizationId==foreign.value.parentOrganizationId
+        print(('[OrganizationsHierarchyBoundaryTest] %s foreignChildDenied=%s foreignParentDenied=%s ownAllowed=%s replayed=%s childrenBounded=%s targetUnchanged=%s'):format(
+            good and 'PASS' or 'FAIL',tostring(not deniedChild.ok and deniedChild.code=='authorization_denied'),
+            tostring(not deniedParent.ok and deniedParent.code=='authorization_denied'),tostring(set.ok),
+            tostring(replay.ok and replay.value.replayed),tostring(children.ok and #children.value.items==1),
+            tostring(after.ok and after.value.revision==foreign.value.revision)))
+    end,debug.traceback)
+    if not called then print('[OrganizationsHierarchyBoundaryTest] FAIL ' .. tostring(result)) end
+end,true)
+
 RegisterCommand('OrganizationsIdentityBoundaryTest',function(source,args)
     if source~=0 then return end
     local base=args[1]
