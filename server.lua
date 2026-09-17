@@ -139,3 +139,48 @@ RegisterCommand('OrganizationsAuditBoundaryTest',function(source)
     end,debug.traceback)
     if not called then print('[OrganizationsAuditBoundaryTest] FAIL '..tostring(reason)) end
 end,true)
+RegisterCommand('OrganizationsInterestBoundaryTest',function(source,args)
+    if source~=0 then return end
+    local called,reason=xpcall(function()
+        assert(#args==2 and #args[1]<=100,'Use <stable requestId> <character UUID>')
+        local api=exports['feather-organizations']
+        local function Require(result)
+            assert(result.ok,tostring(result.code)..': '..tostring(result.message));return result.value
+        end
+        local foreign=Require(api:FindOrganizationByKey({organizationKey='org_interest_test'}))
+        local request={organizationId=foreign.organizationId,expectedRevision=foreign.revision,
+            interestType='owner',holderType='character',holderId=args[2],
+            requestId=args[1]..':foreign_grant',reasonCode='development.interest_boundary'}
+        local deniedGrant=api:GrantOrganizationInterest(request)
+        assert(not deniedGrant.ok and deniedGrant.code=='authorization_denied','Foreign grant not denied')
+        request.requestId=args[1]..':foreign_revoke'
+        local deniedRevoke=api:RevokeOrganizationInterest(request)
+        assert(not deniedRevoke.ok and deniedRevoke.code=='authorization_denied','Foreign revoke not denied')
+        local spoof={}
+        for key,value in pairs(request) do spoof[key]=value end
+        spoof.sourceResource='feather-organizations';spoof.requestId=args[1]..':spoof'
+        local deniedSpoof=api:GrantOrganizationInterest(spoof)
+        assert(not deniedSpoof.ok and deniedSpoof.code=='invalid_input','Caller injection not rejected')
+        local after=Require(api:GetOrganization({organizationId=foreign.organizationId}))
+        assert(after.revision==foreign.revision and after.status==foreign.status,'Foreign target changed')
+        local owned=Require(api:CreateOrganization({requestId=args[1]..':create',organizationType='business',
+            organizationKey='org_interest_fixture',legalName='Organization Interest Boundary Company',
+            displayName='Interest Boundary',reasonCode='development.interest_boundary'}))
+        local grant={organizationId=owned.organizationId,expectedRevision=1,requestId=args[1]..':grant',
+            reasonCode='development.interest_boundary',interestType='owner',holderType='character',holderId=args[2]}
+        local granted=Require(api:GrantOrganizationInterest(grant))
+        local revoke={}
+        for key,value in pairs(grant) do revoke[key]=value end
+        revoke.expectedRevision=2;revoke.requestId=args[1]..':revoke'
+        local revoked=Require(api:RevokeOrganizationInterest(revoke))
+        local replay=Require(api:GrantOrganizationInterest(grant))
+        local revokeReplay=Require(api:RevokeOrganizationInterest(revoke))
+        local state=Require(api:GetOrganization({organizationId=owned.organizationId}))
+        assert(granted.interestId==revoked.interestId and replay.interestId==granted.interestId
+            and replay.replayed and revokeReplay.replayed and revoked.status=='revoked' and state.revision==3,
+            'Owned change/replay inconsistent')
+        print(('[OrganizationsInterestBoundaryTest] PASS id=%s interestId=%s foreignGrantDenied=true foreignRevokeDenied=true spoofDenied=true targetUnchanged=true ownAllowed=true replayed=true revision=3'):format(
+            owned.organizationId,granted.interestId))
+    end,debug.traceback)
+    if not called then print('[OrganizationsInterestBoundaryTest] FAIL '..tostring(reason)) end
+end,true)

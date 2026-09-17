@@ -38,6 +38,12 @@ belongs in production/default recipe startup.
 
 Stop the fixture after testing:
 
+`OrganizationsInterestBoundaryTest org-interest-boundary-001 <character UUID>`
+uses actual exports to deny foreign grant/revoke and caller spoofing, then creates
+one fixture-owned fixed-key organization and grants/revokes/replays an owner
+interest. Expect revision 3 and stable interest identity. Repeat the exact request
+ID and character UUID after fixture restart. No money/items/permissions change.
+
 Before stopping, run `OrganizationsAuditBoundaryTest` after event and ownership
 acceptance. It verifies creator-scoped history access, rejects caller injection,
 and checks bounded pagination and attribution through actual exports (read-only).
