@@ -38,6 +38,15 @@ belongs in production/default recipe startup.
 
 Stop the fixture after testing:
 
+With Organizations authorization enabled and Admin's default service policy,
+`OrganizationsServicePolicyBoundaryTest org-service-boundary-001 <character UUID>`
+checks that fixture trust and creator ownership do not confer a service grant.
+Owned grant/revoke, creation and retries must deny; caller/subject spoofing must
+not bypass the Core broker binding. Existing fixture state/history remain intact.
+Repeat after fixture restart. The default Admin policy deliberately does not
+grant this fixture, so earlier fixture mutation acceptance commands are expected
+to deny under production authorization unless explicitly configured otherwise.
+
 `OrganizationsInterestReadBoundaryTest` is read-only after interest mutation and
 multi-page read acceptance. It denies foreign interest reads and identity spoofing,
 reads the fixture's own revoked interest, checks filters, cursor authorization,

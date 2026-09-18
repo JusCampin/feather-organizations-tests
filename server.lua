@@ -223,3 +223,46 @@ RegisterCommand('OrganizationsInterestReadBoundaryTest',function(source)
     end,debug.traceback)
     if not called then print('[OrganizationsInterestReadBoundaryTest] FAIL '..tostring(reason)) end
 end,true)
+RegisterCommand('OrganizationsServicePolicyBoundaryTest',function(source,args)
+    if source~=0 then return end
+    local called,reason=xpcall(function()
+        assert(#args==2 and #args[1]<=100,'Use <stable requestId> <character UUID>')
+        local api=exports['feather-organizations']
+        local function Require(result) assert(result.ok,tostring(result.code)..': '..tostring(result.message));return result.value end
+        local owned=Require(api:FindOrganizationByKey({organizationKey='org_interest_fixture'}))
+        local history=Require(api:InspectOrganizationHistory({organizationId=owned.organizationId}))
+        local before=Require(api:ListOrganizationInterests({organizationId=owned.organizationId}))
+        assert(#history.items==3 and #before.items==1 and before.items[1].status=='revoked','Expected prior boundary fixture at revision 3')
+        local request={organizationId=owned.organizationId,expectedRevision=owned.revision,interestType='owner',holderType='character',
+            holderId=args[2],requestId=args[1]..':grant',reasonCode='development.service_boundary'}
+        local function Denied(result)
+            assert(not result.ok and result.code=='authorization_denied','Unconfigured service principal was not denied')
+        end
+        Denied(api:GrantOrganizationInterest(request))
+        Denied(api:GrantOrganizationInterest(request))
+        local revoke={}
+        for key,value in pairs(request) do revoke[key]=value end
+        revoke.requestId=args[1]..':revoke'
+        Denied(api:RevokeOrganizationInterest(revoke))
+        local create={requestId=args[1]..':create',organizationType='business',organizationKey='org_service_denied_fixture',
+            legalName='Denied Service Fixture Company',displayName='Denied Service Fixture',reasonCode='development.service_boundary'}
+        Denied(api:CreateOrganization(create))
+        local notCreated=api:FindOrganizationByKey({organizationKey=create.organizationKey})
+        assert(not notCreated.ok and notCreated.code=='organization_not_found','Denied creation persisted an entity')
+        local spoof={}
+        for key,value in pairs(request) do spoof[key]=value end
+        spoof.sourceResource='feather-organizations'
+        local injection=api:GrantOrganizationInterest(spoof)
+        assert(not injection.ok and injection.code=='invalid_input','Principal injection accepted')
+        local after=Require(api:GetOrganization({organizationId=owned.organizationId}))
+        local afterHistory=Require(api:InspectOrganizationHistory({organizationId=owned.organizationId}))
+        local afterInterests=Require(api:ListOrganizationInterests({organizationId=owned.organizationId}))
+        assert(after.revision==owned.revision and after.status==owned.status and #afterHistory.items==#history.items
+            and #afterInterests.items==1 and afterInterests.items[1].interestId==before.items[1].interestId
+            and afterInterests.items[1].revision==before.items[1].revision and afterInterests.items[1].status=='revoked','Denied requests altered fixture state')
+        local direct=exports['feather-core']:Authorize('organizations.interest.manage',{subject={resource='feather-organizations'}})
+        assert(direct.ok and direct.value.allowed==false and direct.value.code=='service_forbidden','Direct Core caller spoof bypassed broker binding')
+        print('[OrganizationsServicePolicyBoundaryTest] PASS trustedButUngrantable=true ownGrantDenied=true ownRevokeDenied=true creationDenied=true retryDenied=true spoofDenied=true directCallerDenied=true unchanged=true (no organizations or interests created)')
+    end,debug.traceback)
+    if not called then print('[OrganizationsServicePolicyBoundaryTest] FAIL '..tostring(reason)) end
+end,true)
